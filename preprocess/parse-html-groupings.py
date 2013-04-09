@@ -106,14 +106,31 @@ def getMapping(inputDir):
     groupingFile = open(inputDir + filename)
     fileMapping = parseGroupingFile(groupingFile)
     updateMapping(mapping, fileMapping)
-  for (word, num), pbSenses in mapping.items():
-    for pbSense in pbSenses:
-      yield WordSenseMapping(word, num, pbSense)
+  return mapping
+
+def invertMapping(mapping):
+  """Given a map from keys to sets of values, build the inverse map.
+  """
+  inverse = {}
+  for key, values in mapping.items():
+    for value in values:
+      if value in inverse:
+        inverse[value].update(set([key]))
+      else:
+        inverse[value] = set([key])
+  return inverse
 
 def outputMapping(outputDir, mapping):
   outputFile = open(outputDir + 'wn-pb.tsv', 'w')
-  for entry in mapping:
-    print('\t'.join(entry), file=outputFile)
+  for (word, num), pbSenses in mapping.items():
+    for pbSense in pbSenses:
+      print('\t'.join([word, num, pbSense]), file=outputFile)
+
+  inverse = invertMapping(mapping)
+  inverseFile = open(outputDir + 'pb-wn.tsv', 'w')
+  for pbSense, wnSenses in inverse.items():
+    for (word, num) in wnSenses:
+      print('\t'.join([pbSense, word, num]), file=inverseFile)
 
 def run(inputDir, outputDir):
   mapping = getMapping(inputDir)
