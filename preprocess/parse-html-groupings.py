@@ -20,16 +20,34 @@ def parseLine(line):
   If the line indicates a new sense number, it returns a new sense number.
   If the line indicates a Propbank mapping, it returns the Propbank senses.
   If the line indicates a WordNet mapping, it returns the WordNet sense numbers.
+  If the line indicates a verb particle construction, it returns a singleton
+    mapping from the verb phrase to the set of senses for that phrase.
   """
   match = re.search('Sense Number (\d+)', line)
   if match is not None:
     return match.group(1), 'SENSENUM'
+
   match = re.search('PropBank: (.+\..+)<br>', line)
   if match is not None:
-    return set([x.strip() for x in match.group(1).split(',')]), 'PROPBANK'
+    return (
+      set([x.strip() for x in match.group(1).split(',') if '-' not in x]),
+      'PROPBANK'
+    )
+
   match = re.search('WordNet 3\.0 Sense Numbers: (\d.*)</font>', line)
   if match is not None:
     return set([x.strip() for x in match.group(1).split(',')]), 'WORDNET'
+
+  match = re.match(' ?<i>(\w+)</i> (\d.*)<br>', line)
+  if match is not None:
+    return (
+      {
+        match.group(1):
+        set([x.strip() for x in match.group(2).split(',')])
+      },
+      'VPC'
+    )
+
   return None, None
 
 def updateFileMapping(fileMapping, word, wnSenses, pbSenses):
@@ -42,53 +60,51 @@ def parseGroupingFile(groupingFile):
 
   The rules are:
     START -> SENSENUM
-    SENSENUM -> reset mappings, go to PROPBANK or WORDNET or SENSENUM
-    PROPBANK -> WORDNET (save mapping) or SENSENUM
-    WORDNET -> PROPBANK (save mapping) or SENSENUM
+    SENSENUM -> Reset mappings. Go to PROPBANK or back to SENSENUM
+    PROPBANK -> Go to WORDNET (save mappings) or back to SENSENUM
+    WORDNET -> Go to VPC (save mappings) or back to SENSENUM
+    VPC -> Go back to SENSENUM
 
   Returns: a map like {('prompt', '1'): {'prompt.01', 'prompt.02'}}
   """
   path, groupingFileName = os.path.split(groupingFile.name)
   word = groupingFileName[:-7]
+  isVpc = word.endswith('-vpc')
   fileMapping = {}
   state = 'START'
+  transitions = {
+    ('START', 'SENSENUM'),
+    ('SENSENUM', 'SENSENUM'),
+    ('SENSENUM', 'PROPBANK'),
+    ('PROPBANK', 'SENSENUM'),
+    ('PROPBANK', 'WORDNET'),
+    ('PROPBANK', 'VPC'),
+    ('WORDNET', 'SENSENUM'),
+    ('WORDNET', 'VPC'),
+    ('VPC', 'SENSENUM'),
+    ('VPC', 'VPC')
+  }
   pbSenses = set()
   wnSenses = set()
+  vpcs = {}
   for line in groupingFile:
     match, nextState = parseLine(line)
-    if match is not None:
-      if state == 'START':
-        if nextState != 'SENSENUM':
-          raise RuntimeError('Sense number not the first thing found.')
-      elif state == 'SENSENUM':
+    if match is not None and (state, nextState) in transitions:
+      if nextState == 'SENSENUM':
         pbSenses = set()
         wnSenses = set()
-        if nextState == 'PROPBANK':
-          pbSenses = match
-        elif nextState == 'WORDNET':
-          wnSenses = match
-        elif nextState == 'SENSENUM':
-          pass
-        else:
-          raise RuntimeError('Went back to start state.')
-      elif state == 'PROPBANK':
-        if nextState == 'WORDNET':
-          wnSenses = match
+        vpcs = {}
+      elif nextState == 'PROPBANK':
+        pbSenses = match
+      elif nextState == 'WORDNET':
+        wnSenses = match
+        if not isVpc:
           updateFileMapping(fileMapping, word, wnSenses, pbSenses)
-        elif nextState == 'SENSENUM':
-          pass
-        else:
-          raise RuntimeError('Illegal state.')
-      elif state == 'WORDNET':
-        if nextState == 'PROPBANK':
-          pbSenses = match
-          updateFileMapping(fileMapping, word, wnSenses, pbSenses)
-        elif nextState == 'SENSENUM':
-          pass
-        else:
-          raise RuntimeError('Illegal state.')
+      elif nextState == 'VPC':
+        for vp, senseNumbers in match.items():
+          updateFileMapping(fileMapping, vp, senseNumbers, pbSenses)
       else:
-        raise RuntimeError('Entered unknown state.')
+        raise RuntimeError('Entered illegal state.')
       state = nextState
   return fileMapping
 
