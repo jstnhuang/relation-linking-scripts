@@ -5,7 +5,7 @@ import collections
 import sys
 
 PbToStringEntry = collections.namedtuple('PbToStringEntry',
-  ['pb', 'wn1', 'wn1Count', 'word', 'wn2Count', 'wn2']
+  ['pb', 'wn1', 'word', 'wn2', 'wn2Count']
 )
 
 StrToPbEntry = collections.namedtuple('StrToPbEntry',
@@ -85,7 +85,7 @@ def exportTables(inputDir, outputDir):
   exportToTsv(outputDir + 'str-to-pb-syn.tsv', strSynToPbTable)
 
   pbToStrTroRows = readTsvFile(
-    inputDir + 'propbank-to-troponyms.tsv',
+    inputDir + 'propbank-to-hyponyms.tsv',
     PbToStringEntry
   )
   strTroToPbTable = computeStrToPbTable(pbToStrTroRows)
