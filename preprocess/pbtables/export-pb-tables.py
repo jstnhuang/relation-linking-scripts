@@ -22,6 +22,52 @@ def readTsvFile(path, namedType):
     rows.append(namedType(*columns))
   return rows
 
+def computeWnTotals(pbToStrSynRows, pbToStrTroRows):
+  """Totals the tag counts of all of a word's senses.
+
+  Example:
+  pb-to-syn has four senses of "exhibit":
+    exhibit%2:38:00:: 0   exhibit.01, march.01
+    exhibit%2:39:00:: 4   demonstrate.01, exhibit.01, present.01, show.01
+    exhibit%2:39:01:: 11  display.01, exhibit.01, expose.01
+    exhibit%2:42:00:: 13  exhibit.01
+  pb-to-tro has just the one sense, which we don't double-count.
+    exhibit%2:42:00:: 13  possess.01
+  With add-1 smoothing, the total is 1 + 5 + 12 + 14 = 32.
+  """
+  pbToStrRows = []
+  pbToStrRows.extend(pbToStrSynRows)
+  pbToStrRows.extend(pbToStrTroRows)
+
+  wnCounts = {}
+  for pbToStrEntry in pbToStrRows:
+    count = int(pbToStrEntry.wn2Count) + 1
+    wnCounts[pbToStrEntry.word, pbToStrEntry.wn2] = count
+
+  wnTotals = collections.Counter()
+  for (word, wn), count in wnCounts.items():
+    wnTotals[word] += count
+
+  return wnTotals
+
+def computeStrToPbTable(pbToStrRows, wnTotals):
+  """Output the tuples: (Verb phrase, PropBank sense, probability, count).
+
+  Probability is determined by WordNet sense. In the exhibit example, the total
+  for "exhibit" was 32. Every word sense goes to exhibit.01, so the probability
+  of exhibit.01 is 32/32 = 1. display.01 only goes to exhibit%2:39:01::, so its
+  probability is 12/32 = 0.375.
+  """
+  table = collections.Counter()
+  for pbToStrEntry in pbToStrRows:
+    count = int(pbToStrEntry.wn2Count) + 1
+    table[pbToStrEntry.word, pbToStrEntry.pb] += count
+
+  return sorted([
+    StrToPbEntry(vp, pb, count/wnTotals[vp], count)
+    for (vp, pb), count in table.items()
+  ])
+
 def quoteStrings(rows):
   """Quotes string fields.
   """
@@ -41,34 +87,6 @@ def writeTsvFile(path, rows):
   for row in rows:
     print('\t'.join([str(col) for col in row]), file=tsvFile)
 
-def computeStrToPbTable(pbToStrRows):
-  """
-  Output is a list of tuples, (Verb phrase, PropBank sense, probability, count).
-
-  Probability is determined by WordNet sense. Example:
-  pb-to-syn  has two senses for exhibit
-    exhibit%2:39:01::   11      display.01
-    exhibit%2:39:00::   4       show.03, present.01, demonstrate.02
-  We do add-1 smoothing, so exhibit links to display.01 with probability 12/17
-  and to show.03, present.01, demonstrate.02 with probability 6/17. We store the
-  count as well, so the tuples would be like (exhibit, display.01, 12/17, 12).
-  """
-  table = collections.Counter()
-  wnCounts = {}
-  for pbToStrEntry in pbToStrRows:
-    count = int(pbToStrEntry.wn2Count) + 1
-    table[pbToStrEntry.word, pbToStrEntry.pb] += count
-    wnCounts[pbToStrEntry.word, pbToStrEntry.wn2] = count
-
-  wnTotals = collections.Counter()
-  for (word, wn), count in wnCounts.items():
-    wnTotals[word] += count
-
-  return sorted([
-    StrToPbEntry(vp, pb, count/wnTotals[vp], count)
-    for (vp, pb), count in table.items()
-  ])
-
 def exportToTsv(path, table):
   """Exports the given table to a TSV file for SQLite3 and Derby."""
   writeTsvFile(path, table)
@@ -81,14 +99,16 @@ def exportTables(inputDir, outputDir):
     inputDir + 'propbank-to-synonyms.tsv',
     PbToStringEntry
   )
-  strSynToPbTable = computeStrToPbTable(pbToStrSynRows)
-  exportToTsv(outputDir + 'str-to-pb-syn.tsv', strSynToPbTable)
-
   pbToStrTroRows = readTsvFile(
     inputDir + 'propbank-to-hyponyms.tsv',
     PbToStringEntry
   )
-  strTroToPbTable = computeStrToPbTable(pbToStrTroRows)
+  wnTotals = computeWnTotals(pbToStrSynRows, pbToStrTroRows)
+
+  strSynToPbTable = computeStrToPbTable(pbToStrSynRows, wnTotals)
+  strTroToPbTable = computeStrToPbTable(pbToStrTroRows, wnTotals)
+
+  exportToTsv(outputDir + 'str-to-pb-syn.tsv', strSynToPbTable)
   exportToTsv(outputDir + 'str-to-pb-tro.tsv', strTroToPbTable)
 
 def main():
