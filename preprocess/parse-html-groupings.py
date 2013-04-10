@@ -86,14 +86,12 @@ def parseGroupingFile(groupingFile):
   }
   pbSenses = set()
   wnSenses = set()
-  vpcs = {}
   for line in groupingFile:
     match, nextState = parseLine(line)
     if match is not None and (state, nextState) in transitions:
       if nextState == 'SENSENUM':
         pbSenses = set()
         wnSenses = set()
-        vpcs = {}
       elif nextState == 'PROPBANK':
         pbSenses = match
       elif nextState == 'WORDNET':
