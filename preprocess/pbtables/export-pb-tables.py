@@ -55,15 +55,26 @@ def computeWnTotals(pbToStrSynRows, pbToStrTroRows):
 def computeStrToPbTable(pbToStrRows, wnTotals):
   """Output the tuples: (Verb phrase, PropBank sense, probability, count).
 
-  Probability is determined by WordNet sense. In the exhibit example, the total
-  for "exhibit" was 32. Every word sense goes to exhibit.01, so the probability
-  of exhibit.01 is 32/32 = 1. display.01 only goes to exhibit%2:39:01::, so its
-  probability is 12/32 = 0.375.
+  Probability is determined by WordNet sense. In the exhibit example, exhibit.01
+  goes to every sense, so its total count is 32, making its probability 32/32 = 
+  1. display.01 only goes to one sense, with count 12, so its probability is
+  12/32 = 0.375. show.01 only goes to exhibit%2:39:00:: in pb-to-syn, so its
+  probability is 5/32 = 0.15625. However, show.01 goes to both exhibit%2:39:00::
+  and exhibit:%2:39:01 in pb-to-tro, so its probability in the str-to-pb-tro
+  table is (5 + 12)/32 = 0.53125.
   """
   table = collections.Counter()
-  for pbToStrEntry in pbToStrRows:
-    count = int(pbToStrEntry.wn2Count) + 1
-    table[pbToStrEntry.word, pbToStrEntry.pb] += count
+  pbToWnSenses = {}
+  for entry in pbToStrRows:
+    count = int(entry.wn2Count) + 1
+    pb = entry.pb
+    wn2 = entry.wn2
+    if pb not in pbToWnSenses or wn2 not in pbToWnSenses[pb]:
+      table[entry.word, pb] += count
+      if pb not in pbToWnSenses:
+        pbToWnSenses[pb] = {wn2}
+      else:
+        pbToWnSenses[pb].add(wn2)
 
   return sorted([
     StrToPbEntry(vp, pb, count/wnTotals[vp], count)
