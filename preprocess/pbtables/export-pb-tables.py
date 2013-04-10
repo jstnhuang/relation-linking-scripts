@@ -31,7 +31,9 @@ def computeWnTotals(pbToStrSynRows, pbToStrTroRows):
     exhibit%2:39:00:: 4   demonstrate.01, exhibit.01, present.01, show.01
     exhibit%2:39:01:: 11  display.01, exhibit.01, expose.01
     exhibit%2:42:00:: 13  exhibit.01
-  pb-to-tro has just the one sense, which we don't double-count.
+  pb-to-tro has three senses, all seen before, which we don't double-count.
+    exhibit%2:39:00:: 4   show.01, show.02
+    exhibit%2:39:01:: 11  show.01, show.02
     exhibit%2:42:00:: 13  possess.01
   With add-1 smoothing, the total is 1 + 5 + 12 + 14 = 32.
   """
