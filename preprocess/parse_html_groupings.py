@@ -86,12 +86,20 @@ def parseGroupingFile(groupingFile):
   }
   pbSenses = set()
   wnSenses = set()
+  vpcMappings = []
   for line in groupingFile:
     match, nextState = parseLine(line)
     if match is not None and (state, nextState) in transitions:
       if nextState == 'SENSENUM':
+        if len(vpcMappings) <= 5:
+          for vpcMapping in vpcMappings:
+            for vp, senseNumbers in vpcMapping.items():
+              updateFileMapping(fileMapping, vp, senseNumbers, pbSenses)
+        else:
+          print('Excluded VPC mappings: {}'.format(vpcMappings))
         pbSenses = set()
         wnSenses = set()
+        vpcMappings = []
       elif nextState == 'PROPBANK':
         pbSenses = match
       elif nextState == 'WORDNET':
@@ -99,11 +107,18 @@ def parseGroupingFile(groupingFile):
         if not isVpc:
           updateFileMapping(fileMapping, word, wnSenses, pbSenses)
       elif nextState == 'VPC':
-        for vp, senseNumbers in match.items():
-          updateFileMapping(fileMapping, vp, senseNumbers, pbSenses)
+        vpcMappings.append(match)
       else:
         raise RuntimeError('Entered illegal state.')
       state = nextState
+
+  if len(vpcMappings) <= 5:
+    for vpcMapping in vpcMappings:
+      for vp, senseNumbers in vpcMapping.items():
+        updateFileMapping(fileMapping, vp, senseNumbers, pbSenses)
+  else:
+    print('Excluded VPC mappings (end of file): {}'.format(vpcMappings))
+
   return fileMapping
 
 def updateMapping(mapping, subMapping):
