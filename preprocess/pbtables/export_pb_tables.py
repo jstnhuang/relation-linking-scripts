@@ -22,7 +22,7 @@ def readTsvFile(path, namedType):
     rows.append(namedType(*columns))
   return rows
 
-def computeWnTotals(pbToStrSynRows, pbToStrTroRows):
+def computeWnTotals(pbToStrSynRows, pbToStrTroRows, pbToStrHypRows):
   """Totals the tag counts of all of a word's senses.
 
   Example:
@@ -40,6 +40,7 @@ def computeWnTotals(pbToStrSynRows, pbToStrTroRows):
   pbToStrRows = []
   pbToStrRows.extend(pbToStrSynRows)
   pbToStrRows.extend(pbToStrTroRows)
+  pbToStrRows.extend(pbToStrHypRows)
 
   wnCounts = {}
   for pbToStrEntry in pbToStrRows:
@@ -116,13 +117,19 @@ def exportTables(inputDir, outputDir):
     inputDir + 'propbank-to-hyponyms.tsv',
     PbToStringEntry
   )
-  wnTotals = computeWnTotals(pbToStrSynRows, pbToStrTroRows)
+  pbToStrHypRows = readTsvFile(
+    inputDir + 'propbank-to-hypernyms.tsv',
+    PbToStringEntry
+  )
+  wnTotals = computeWnTotals(pbToStrSynRows, pbToStrTroRows, pbToStrHypRows)
 
   strSynToPbTable = computeStrToPbTable(pbToStrSynRows, wnTotals)
   strTroToPbTable = computeStrToPbTable(pbToStrTroRows, wnTotals)
+  strHypToPbTable = computeStrToPbTable(pbToStrHypRows, wnTotals)
 
   exportToTsv(outputDir + 'str-to-pb-syn.tsv', strSynToPbTable)
   exportToTsv(outputDir + 'str-to-pb-tro.tsv', strTroToPbTable)
+  exportToTsv(outputDir + 'str-to-pb-hyp.tsv', strHypToPbTable)
 
 def main():
   """Gather args and call export function.
