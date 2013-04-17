@@ -5,7 +5,7 @@ import collections
 import sys
 
 PbToStringEntry = collections.namedtuple('PbToStringEntry',
-  ['pb', 'wn1', 'word', 'wn2', 'wn2Count']
+  ['pb', 'wn1', 'wn1Count', 'word', 'wn2', 'wn2Count']
 )
 
 StrToPbEntry = collections.namedtuple('StrToPbEntry',
