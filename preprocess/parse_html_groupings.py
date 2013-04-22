@@ -1,7 +1,7 @@
-"""Extracts WordNet to PropBank mappings from Colorado HTML groupings.
+"""Extracts WordNet to VerbNet mappings from Colorado HTML groupings.
 See http://verbs.colorado.edu/html_groupings/ for the data.
 
-To execute: python3 parse-html-groupings.py /path/to/input /path/to/output
+To execute: python3 parse-html-groupings.py /path/to/input/ /path/to/output/
 """
 
 import collections
@@ -9,9 +9,13 @@ import os
 import re
 import sys
 
-WordSenseMapping = collections.namedtuple(
-  'WordSenseMapping',
-  ['word', 'wnSenseNum', 'propbankSense']
+WordNetSense = collections.namedtuple(
+  'WordNetSense',
+  ['word', 'senseNum']
+)
+VerbNetSense = collections.namedtuple(
+  'VerbNetSense',
+  ['verb', 'senseNum', 'gloss']
 )
 
 def parseLine(line):
@@ -23,16 +27,9 @@ def parseLine(line):
   If the line indicates a verb particle construction, it returns a singleton
     mapping from the verb phrase to the set of senses for that phrase.
   """
-  match = re.search('Sense Number (\d+)', line)
+  match = re.search('Sense Number (\d+): (.*)</h3>', line)
   if match is not None:
-    return match.group(1), 'SENSENUM'
-
-  match = re.search('PropBank: (.+\..+)<br>', line)
-  if match is not None:
-    return (
-      set([x.strip() for x in match.group(1).split(',') if '-' not in x]),
-      'PROPBANK'
-    )
+    return (match.group(1).strip(), match.group(2).strip()), 'SENSENUM'
 
   match = re.search('WordNet 3\.0 Sense Numbers: (\d.*)</font>', line)
   if match is not None:
@@ -41,95 +38,81 @@ def parseLine(line):
   match = re.match(' ?<i>(\w+)</i> (\d.*)<br>', line)
   if match is not None:
     return (
-      {
-        match.group(1):
+      (
+        match.group(1),
         set([x.strip() for x in match.group(2).split(',')])
-      },
+      ),
       'VPC'
     )
 
   return None, None
 
-def updateFileMapping(fileMapping, word, wnSenses, pbSenses):
-  for num in wnSenses:
-    subMapping = {(word, num): pbSenses}
-    updateMapping(fileMapping, subMapping)
+def updateFileMapping(fileMapping, wnSense, vnSense):
+  if wnSense in fileMapping:
+    fileMapping[wnSense].add(vnSense)
+  else:
+    fileMapping[wnSense] = set([vnSense])
 
 def parseGroupingFile(groupingFile):
-  """FSA that gets the WordNet-Propbank mappings for each grouping sense.
+  """FSA that gets the WordNet-VerbNet mappings for each grouping sense.
 
   The rules are:
     START -> SENSENUM
-    SENSENUM -> Reset mappings. Go to PROPBANK or back to SENSENUM
-    PROPBANK -> Go to WORDNET (save mappings) or back to SENSENUM
-    WORDNET -> Go to VPC (save mappings) or back to SENSENUM
+    SENSENUM -> Reset mappings. Go to WORDNET or back to SENSENUM
+    WORDNET -> Go to VPC or back to SENSENUM
     VPC -> Go back to SENSENUM
 
-  Returns: a map like {('prompt', '1'): {'prompt.01', 'prompt.02'}}
+  Returns: a map from WordNet senses to a set of VerbNet senses.
   """
-  path, groupingFileName = os.path.split(groupingFile.name)
-  word = groupingFileName[:-7]
-  isVpc = word.endswith('-vpc')
   fileMapping = {}
+  path, groupingFileName = os.path.split(groupingFile.name)
+  fileWord = groupingFileName[:-7]
   state = 'START'
   transitions = {
     ('START', 'SENSENUM'),
     ('SENSENUM', 'SENSENUM'),
-    ('SENSENUM', 'PROPBANK'),
-    ('PROPBANK', 'SENSENUM'),
-    ('PROPBANK', 'WORDNET'),
-    ('PROPBANK', 'VPC'),
+    ('SENSENUM', 'WORDNET'),
+    ('SENSENUM', 'VPC'),
     ('WORDNET', 'SENSENUM'),
     ('WORDNET', 'VPC'),
     ('VPC', 'SENSENUM'),
     ('VPC', 'VPC')
   }
-  pbSenses = set()
+  vnSense = None
   wnSenses = set()
-  vpcMappings = []
   for line in groupingFile:
     match, nextState = parseLine(line)
     if match is not None and (state, nextState) in transitions:
       if nextState == 'SENSENUM':
-        if len(vpcMappings) <= 5:
-          for vpcMapping in vpcMappings:
-            for vp, senseNumbers in vpcMapping.items():
-              updateFileMapping(fileMapping, vp, senseNumbers, pbSenses)
-        else:
-          print('Excluded VPC mappings: {}'.format(vpcMappings))
-        pbSenses = set()
+        senseNum, gloss = match
+        vnSense = VerbNetSense(fileWord, senseNum, gloss)
         wnSenses = set()
-        vpcMappings = []
-      elif nextState == 'PROPBANK':
-        pbSenses = match
       elif nextState == 'WORDNET':
-        wnSenses = match
-        if not isVpc:
-          updateFileMapping(fileMapping, word, wnSenses, pbSenses)
+        wnSenseNums = match
+        word = fileWord[:-4] if fileWord.endswith('-vpc') else fileWord
+        for senseNum in wnSenseNums:
+          wnSense = WordNetSense(word, senseNum)
+          updateFileMapping(fileMapping, wnSense, vnSense)
       elif nextState == 'VPC':
-        vpcMappings.append(match)
+        vpcWord, vpcSenseNums = match
+        for senseNum in vpcSenseNums:
+          vpcSense = WordNetSense(vpcWord, senseNum)
+          updateFileMapping(fileMapping, vpcSense, vnSense)
       else:
         raise RuntimeError('Entered illegal state.')
       state = nextState
 
-  if len(vpcMappings) <= 5:
-    for vpcMapping in vpcMappings:
-      for vp, senseNumbers in vpcMapping.items():
-        updateFileMapping(fileMapping, vp, senseNumbers, pbSenses)
-  else:
-    print('Excluded VPC mappings (end of file): {}'.format(vpcMappings))
-
   return fileMapping
 
 def updateMapping(mapping, subMapping):
-  for (word, num), pbSenses in subMapping.items():
-    if (word, num) in mapping:
-      mapping[word, num].update(pbSenses)
+  for wnSense, vnSenses in subMapping.items():
+    if wnSense in mapping:
+      mapping[wnSense].update(vnSenses)
     else:
-      mapping[word, num] = pbSenses
+      mapping[wnSense] = vnSenses
 
 def getMapping(inputDir):
-  mapping = {} # Maps (word, WN sense number) tuples to sets of PropBank senses.
+  mapping = {} # Maps WordNet senses to sets of VerbNet senses.
   groupingFilenames = os.listdir(path=inputDir)
   for filename in groupingFilenames:
     groupingFile = open(inputDir + filename)
@@ -150,16 +133,28 @@ def invertMapping(mapping):
   return inverse
 
 def outputMapping(outputDir, mapping):
-  outputFile = open(outputDir + 'wn-pb.tsv', 'w')
-  for (word, num), pbSenses in mapping.items():
-    for pbSense in pbSenses:
-      print('\t'.join([word, num, pbSense]), file=outputFile)
+  outputFile = open(outputDir + 'wn-vn.tsv', 'w')
+  for wnSense, vnSenses in mapping.items():
+    for vnSense in vnSenses:
+      print('\t'.join([
+        wnSense.word,
+        wnSense.senseNum,
+        vnSense.verb,
+        vnSense.senseNum,
+        vnSense.gloss
+      ]), file=outputFile)
 
   inverse = invertMapping(mapping)
-  inverseFile = open(outputDir + 'pb-wn.tsv', 'w')
-  for pbSense, wnSenses in inverse.items():
-    for (word, num) in wnSenses:
-      print('\t'.join([pbSense, word, num]), file=inverseFile)
+  inverseFile = open(outputDir + 'vn-wn.tsv', 'w')
+  for vnSense, wnSenses in inverse.items():
+    for wnSense in wnSenses:
+      print('\t'.join([
+        vnSense.verb,
+        vnSense.senseNum,
+        vnSense.gloss,
+        wnSense.word,
+        wnSense.senseNum
+      ]), file=inverseFile)
 
 def run(inputDir, outputDir):
   mapping = getMapping(inputDir)
