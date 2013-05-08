@@ -27,4 +27,4 @@ CALL SYSCS_UTIL.SYSCS_IMPORT_TABLE(
   0
 );
 CREATE INDEX wn_to_vn_index ON wn_to_vn (wn);
-CREATE INDEX vn_to_vn_index ON vn_to_vn (vn1);
+CREATE INDEX vn_to_vn_index ON vn_to_vn (vn2);
