@@ -10,7 +10,7 @@ def main():
     pattern = line.strip()
     for specialChar in specialChars:
       pattern = pattern.replace(specialChar, '\\' + specialChar)
-    tuples.add(pattern)
+    tuples.add('^{}	'.format(pattern))
   print('grep "{}" $1'.format('\\|'.join(tuples)))
 
 if __name__ == '__main__':
