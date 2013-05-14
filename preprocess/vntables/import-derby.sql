@@ -1,4 +1,4 @@
-CONNECT 'jdbc:derby:vntables; create=true';
+CONNECT 'jdbc:derby:relationlinking; create=true';
 
 CREATE TABLE wn_to_vn (
   wn VARCHAR(32000), 
@@ -7,6 +7,10 @@ CREATE TABLE wn_to_vn (
 CREATE TABLE vn_to_vn (
   vn1 VARCHAR(32000), 
   vn2 VARCHAR(32000)
+);
+CREATE TABLE clean (
+  rel1 VARCHAR(32000),
+  rel2 VARCHAR(32000)
 );
 CALL SYSCS_UTIL.SYSCS_IMPORT_TABLE(
   null,
@@ -26,5 +30,15 @@ CALL SYSCS_UTIL.SYSCS_IMPORT_TABLE(
   null,
   0
 );
+CALL SYSCS_UTIL.SYSCS_IMPORT_TABLE(
+  null,
+  'CLEAN',
+  'clean_derby.tsv',
+  '	',
+  '"',
+  null,
+  0
+);
 CREATE INDEX wn_to_vn_index ON wn_to_vn (wn);
-CREATE INDEX vn_to_vn_index ON vn_to_vn (vn2);
+CREATE INDEX vn_to_vn_index ON vn_to_vn (vn1, vn2);
+CREATE INDEX clean_index ON clean (rel1, rel2);
